@@ -118,20 +118,7 @@ describe('[integration testing] bundler should ', () => {
               summary:
                 'Command a particular streetlight to turn the lights on or off.',
               payload: {
-                $schema: 'https://json-schema.org/draft/2020-12/schema',
-                type: 'object',
-                properties: {
-                  command: {
-                    type: 'string',
-                    enum: ['on', 'off'],
-                    description: 'Whether to turn on or off the light.',
-                  },
-                  sentAt: {
-                    type: 'string',
-                    format: 'date-time',
-                    description: 'Date and time when the message was sent.',
-                  },
-                },
+                $ref: expect.stringMatching(/^#\/components\/schemas\//),
               },
             },
           },
@@ -146,20 +133,7 @@ describe('[integration testing] bundler should ', () => {
               summary:
                 'Command a particular streetlight to turn the lights on or off.',
               payload: {
-                $schema: 'https://json-schema.org/draft/2020-12/schema',
-                type: 'object',
-                properties: {
-                  command: {
-                    type: 'string',
-                    enum: ['on', 'off'],
-                    description: 'Whether to turn on or off the light.',
-                  },
-                  sentAt: {
-                    type: 'string',
-                    format: 'date-time',
-                    description: 'Date and time when the message was sent.',
-                  },
-                },
+                $ref: expect.stringMatching(/^#\/components\/schemas\//),
               },
             },
           },
@@ -175,20 +149,7 @@ describe('[integration testing] bundler should ', () => {
                 'Inform about environmental lighting conditions of a particular streetlight.',
               contentType: 'application/json',
               payload: {
-                $schema: 'https://json-schema.org/draft/2020-12/schema',
-                type: 'object',
-                properties: {
-                  lumens: {
-                    type: 'integer',
-                    minimum: 0,
-                    description: 'Light intensity measured in lumens.',
-                  },
-                  sentAt: {
-                    type: 'string',
-                    format: 'date-time',
-                    description: 'Date and time when the message was sent.',
-                  },
-                },
+                $ref: expect.stringMatching(/^#\/components\/schemas\//),
               },
             },
           },
@@ -246,20 +207,7 @@ describe('[integration testing] bundler should ', () => {
             summary:
               'Command a particular streetlight to turn the lights on or off.',
             payload: {
-              $schema: 'https://json-schema.org/draft/2020-12/schema',
-              type: 'object',
-              properties: {
-                command: {
-                  type: 'string',
-                  enum: ['on', 'off'],
-                  description: 'Whether to turn on or off the light.',
-                },
-                sentAt: {
-                  type: 'string',
-                  format: 'date-time',
-                  description: 'Date and time when the message was sent.',
-                },
-              },
+              $ref: expect.stringMatching(/^#\/components\/schemas\//),
             },
           },
           lightMeasured: {
@@ -269,23 +217,11 @@ describe('[integration testing] bundler should ', () => {
               'Inform about environmental lighting conditions of a particular streetlight.',
             contentType: 'application/json',
             payload: {
-              $schema: 'https://json-schema.org/draft/2020-12/schema',
-              type: 'object',
-              properties: {
-                lumens: {
-                  type: 'integer',
-                  minimum: 0,
-                  description: 'Light intensity measured in lumens.',
-                },
-                sentAt: {
-                  type: 'string',
-                  format: 'date-time',
-                  description: 'Date and time when the message was sent.',
-                },
-              },
+              $ref: expect.stringMatching(/^#\/components\/schemas\//),
             },
           },
         },
+        schemas: expect.any(Object),
       },
     };
 
@@ -301,6 +237,168 @@ describe('[integration testing] bundler should ', () => {
     });
 
     expect(document.json()).toMatchObject(resultingObject);
+  });
+
+  test('should hoist external schema refs into components.schemas and rewrite channel refs', async () => {
+    const document = await bundle('mocks/async-api.yaml');
+    const asyncapi = document.json() as Record<string, any>;
+
+    expect(asyncapi.components?.schemas).toBeDefined();
+    expect(Object.keys(asyncapi.components.schemas)).toContain('BorrowerDocument');
+
+    const borrowerDocumentSchemaNames = Object.keys(asyncapi.components.schemas).filter(
+      schemaName => schemaName.startsWith('BorrowerDocument')
+    );
+    expect(borrowerDocumentSchemaNames).toStrictEqual(['BorrowerDocument']);
+    expect(Object.keys(asyncapi.components.schemas)).not.toContain('LoanRequest_2');
+    expect(
+      asyncapi.components.schemas.BorrowerDocument.properties.previousDocument.$ref
+    ).toBe('#/components/schemas/BorrowerDocument');
+    expect(
+      asyncapi.components.schemas.Borrower.properties.identityDocument.$ref
+    ).toBe('#/components/schemas/BorrowerDocument');
+    expect(
+      asyncapi.components.schemas.Borrower.properties.additionalDocuments.items.$ref
+    ).toBe('#/components/schemas/BorrowerDocument');
+
+    expect(asyncapi.operations.processPerformScoringRequest.channel.$ref).toBe(
+      '#/channels/scoring'
+    );
+    expect(asyncapi.operations.sendScoringPerformedEvent.channel.$ref).toBe(
+      '#/channels/scoring'
+    );
+
+    const mappingValues = Object.values(asyncapi.components.schemas)
+      .map((schema: any) => schema?.['x-discriminator-mapping'])
+      .filter((mapping: unknown): mapping is Record<string, string> =>
+        typeof mapping === 'object' && mapping !== null
+      )
+      .flatMap(mapping => Object.values(mapping));
+
+    const objectDiscriminatorCount = Object.values(asyncapi.components.schemas).filter(
+      (schema: any) =>
+        schema && typeof schema.discriminator === 'object' && schema.discriminator !== null
+    ).length;
+    expect(objectDiscriminatorCount).toBe(0);
+
+    expect(mappingValues.length).toBeGreaterThan(0);
+    expect(
+      mappingValues.every(value => value.startsWith('#/components/schemas/'))
+    ).toBeTruthy();
+    expect(
+      mappingValues.some(value => /\.(yaml|yml|json)(#.*)?$/i.test(value))
+    ).toBeFalsy();
+
+    const schemaRefs: string[] = [];
+    const schemaDirectKeys = new Set<string>([
+      'schema',
+      'payload',
+      'headers',
+      'items',
+      'additionalItems',
+      'contains',
+      'additionalProperties',
+      'propertyNames',
+      'if',
+      'then',
+      'else',
+      'not',
+      'unevaluatedItems',
+      'unevaluatedProperties',
+    ]);
+    const schemaArrayKeys = new Set<string>([
+      'allOf',
+      'anyOf',
+      'oneOf',
+      'prefixItems',
+    ]);
+    const schemaMapKeys = new Set<string>([
+      'properties',
+      'patternProperties',
+      'definitions',
+      '$defs',
+      'dependentSchemas',
+    ]);
+
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === 'object' && value !== null && !Array.isArray(value);
+
+    const walkSchema = (node: unknown): void => {
+      if (!isRecord(node)) {
+        if (Array.isArray(node)) {
+          node.forEach(entry => walkSchema(entry));
+        }
+        return;
+      }
+
+      if (typeof node.$ref === 'string') {
+        schemaRefs.push(node.$ref);
+      }
+
+      for (const [key, value] of Object.entries(node)) {
+        if (schemaDirectKeys.has(key)) {
+          walkSchema(value);
+          continue;
+        }
+
+        if (schemaArrayKeys.has(key) && Array.isArray(value)) {
+          value.forEach(entry => walkSchema(entry));
+          continue;
+        }
+
+        if (schemaMapKeys.has(key) && isRecord(value)) {
+          Object.values(value).forEach(entry => walkSchema(entry));
+          continue;
+        }
+
+        if (key === 'dependencies' && isRecord(value)) {
+          for (const dependency of Object.values(value)) {
+            if (isRecord(dependency) || typeof dependency === 'boolean') {
+              walkSchema(dependency);
+            }
+          }
+        }
+      }
+    };
+
+    const walkDocument = (node: unknown, pathSegments: Array<string | number>): void => {
+      if (Array.isArray(node)) {
+        node.forEach((entry, index) =>
+          walkDocument(entry, [...pathSegments, index])
+        );
+        return;
+      }
+
+      if (!isRecord(node)) {
+        return;
+      }
+
+      for (const [key, value] of Object.entries(node)) {
+        const nextPath = [...pathSegments, key];
+        const isComponentsSchemas =
+          key === 'schemas' &&
+          pathSegments.length === 1 &&
+          pathSegments[0] === 'components';
+        const isPayloadOrHeaders =
+          (key === 'payload' || key === 'headers') &&
+          !pathSegments.includes('examples');
+
+        if (key === 'schema' || isComponentsSchemas || isPayloadOrHeaders) {
+          walkSchema(value);
+          continue;
+        }
+
+        walkDocument(value, nextPath);
+      }
+    };
+
+    walkDocument(asyncapi, []);
+
+    expect(schemaRefs.length).toBeGreaterThan(0);
+    expect(
+      schemaRefs.every(ref => ref.startsWith('#/components/schemas/'))
+    ).toBeTruthy();
+    expect(() => JSON.stringify(asyncapi)).not.toThrow();
   });
 
   test('should be able to bundle v2 YAML, leaving `x-` properties intact and sorting root props according to AsyncAPI Spec', async () => {

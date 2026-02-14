@@ -6,6 +6,11 @@ import {
   orderPropsAccToAsyncAPISpec,
   mergeIntoBaseFile,
 } from './util';
+import {
+  hoistBundledSchemas,
+  rewriteExternalChannelRefs,
+  stripXOrigin,
+} from './hoistBundledSchemas';
 
 import { Document } from './document';
 
@@ -92,6 +97,10 @@ export default async function bundle(
   options: Options = {}
 ) {
   let bundledDocument: any = {};
+  const parserOptions = {
+    ...options,
+    xOrigin: true,
+  };
 
   // if one string was passed, convert it to an array
   if (typeof files === 'string') {
@@ -104,7 +113,7 @@ export default async function bundle(
     process.chdir(path.resolve(originDir, String(options.baseDir[0]))); // guard against passing an array
   }
 
-  const parsedJsons: AsyncAPIObject[] = await resolve(files, options);
+  const parsedJsons: AsyncAPIObject[] = await resolve(files, parserOptions);
 
   const majorVersion = versionCheck(parsedJsons);
 
@@ -117,8 +126,19 @@ export default async function bundle(
       options.base,
       bundledDocument,
       majorVersion,
-      options
+      parserOptions
     );
+  }
+
+  bundledDocument = await hoistBundledSchemas(
+    bundledDocument as AsyncAPIObject
+  );
+  bundledDocument = rewriteExternalChannelRefs(
+    bundledDocument as AsyncAPIObject
+  );
+
+  if (options.xOrigin !== true) {
+    bundledDocument = stripXOrigin(bundledDocument as AsyncAPIObject);
   }
 
   // Purely decorative stuff, just to bring the order of the AsyncAPI Document's

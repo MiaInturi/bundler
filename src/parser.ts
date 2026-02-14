@@ -23,7 +23,7 @@ export async function parse(
     case 2:
       RefParserOptions = {
         dereference: {
-          circular: false,
+          circular: true,
           // prettier-ignore
           excludedPathMatcher: (path: string): any => { // eslint-disable-line
             return;
@@ -39,7 +39,7 @@ export async function parse(
     case 3:
       RefParserOptions = {
         dereference: {
-          circular: false,
+          circular: true,
           excludedPathMatcher: (path: string): any => {
             return (
               // prettier-ignore

@@ -23,6 +23,17 @@
 ## Overview
 An official library that lets you bundle/dereference or merge into one your AsyncAPI Documents.
 
+This package is a fork of the original [`asyncapi/bundler`](https://github.com/asyncapi/bundler) and extends the upstream behavior.
+
+Compared to upstream, this fork adds:
+
+- Built-in schema hoisting during bundling, moving external and reusable schemas into `#/components/schemas/...`.
+- Rewriting of external schema `$ref` values to local component schema `$ref` values.
+- Rewriting of external operation channel references to local refs (for example `#/channels/...` or `#/components/channels/...` when possible).
+- Discriminator mapping normalization so file-based mapping values are rewritten to component schema refs.
+- Circular dereference support in parser configuration for AsyncAPI v2 and v3 flows.
+- Internal use of `x-origin` metadata for stable naming and rewrites, with automatic cleanup unless `xOrigin: true` is requested.
+
 AsyncAPI Bundler can help you if:
 
 <details>
@@ -235,24 +246,24 @@ Take a look at `./example/bundle-cjs.cjs`, which demonstrates working with `base
 
 ### Property `x-origin`
 
-Property `x-origin` is used for origin tracing in `Bundler` and component naming in `Optimizer`.
+Property `x-origin` is used for origin tracing in `Bundler` and for naming/rewriting logic during schema hoisting.
 
 It originated from [this comment](https://github.com/asyncapi/bundler/issues/97#issuecomment-1330501758) in a year-long discussion: 
 
 > The $ref usually also carries a semantical meaning to understand easier what it is (example "$ref : financial-system.yaml#/components/schemas/bankAccountIdentifier"). If the bundling just resolves this ref inline, the semantical meaning of the $ref pointer gets lost and cannot be recovered in later steps. The optimizer would need to invent an artificial component name for the "bankAccountIdentifier" when moving it to the components section.
 
-Thus, property `x-origin` contains historical values of dereferenced `$ref`s, which are also used by `Optimizer` to give meaningful names to components it moves through the AsyncAPI Document.
+Thus, property `x-origin` contains historical values of dereferenced `$ref`s, which are used to preserve meaningful component names and references during the bundling process.
 
 However, if a user doesn't need / doesn't want `x-origin` properties to be present in the structure of the AsyncAPI Document (values of the `x-origin` property may leak internal details about how the system described by the AsyncAPI Document is structured,) they can pass `{ xOrigin: false }` (or omit passing `xOrigin` at all) to the `Bundler` in the options object.
 
 
 ### Movement of components to `components`
 
-The movement of all AsyncAPI Specification-valid components to the `components` section of the AsyncAPI Document starting from `Bundler` v0.5.0 is done by the [`Optimizer`](https://github.com/asyncapi/optimizer) v1.0.0+.
+In this fork, schema components are hoisted directly during bundling into `components.schemas`, and schema references are normalized to local component refs.
 
-To get in CI/code an AsyncAPI Document, that is dereferenced [to its maximum possible extent](#dereference-of-the-external-references) with all of its components moved to the `components` section, the original AsyncAPI Document must be run through chain `Bundler -> Optimizer`.
+This means payload/header/schema locations that were previously inlined after dereference can now appear as `$ref` values to `#/components/schemas/...`.
 
-If `Optimizer` is not able to find `x-origin` properties during optimization of the provided AsyncAPI Document, the existing names of components are used as a fallback mechanism, but keep in mind that components' names may lack semantic meaning in this case.
+You can still run [`Optimizer`](https://github.com/asyncapi/optimizer) after bundling if you need additional normalization beyond schema hoisting.
 
 
 ### Code examples
