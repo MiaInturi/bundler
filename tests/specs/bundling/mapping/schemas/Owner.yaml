@@ -1,0 +1,9 @@
+type: object
+properties:
+  kind:
+    type: string
+  ownerName:
+    type: string
+required:
+  - kind
+  - ownerName

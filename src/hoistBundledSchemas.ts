@@ -418,6 +418,19 @@ function walkDocumentSchemaContexts(
   for (const [key, value] of Object.entries(node)) {
     const nextPath = [...pathSegments, key];
 
+    const isComponentsSchemasEntryPoint =
+      key === 'schemas' &&
+      pathSegments.length === 1 &&
+      pathSegments[0] === 'components' &&
+      isSchemaObject(value);
+
+    if (isComponentsSchemasEntryPoint) {
+      for (const [schemaName, schema] of Object.entries(value)) {
+        walkSchema(schema, value, schemaName, [...nextPath, schemaName], visitor);
+      }
+      continue;
+    }
+
     if (shouldTreatAsSchemaEntryPoint(pathSegments, key)) {
       walkSchema(value, node, key, nextPath, visitor);
       continue;

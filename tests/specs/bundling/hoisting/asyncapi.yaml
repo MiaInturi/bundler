@@ -1,0 +1,18 @@
+asyncapi: 3.0.0
+info:
+  title: Hoisting fixture
+  version: 1.0.0
+channels:
+  pets:
+    address: pets
+    messages:
+      petCreated:
+        payload:
+          $ref: ./schemas/Pet.yaml
+operations:
+  receivePet:
+    action: receive
+    channel:
+      $ref: '#/channels/pets'
+    messages:
+      - $ref: '#/channels/pets/messages/petCreated'

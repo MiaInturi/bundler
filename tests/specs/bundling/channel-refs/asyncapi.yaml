@@ -1,0 +1,14 @@
+asyncapi: 3.0.0
+info:
+  title: Channel refs fixture
+  version: 1.0.0
+channels:
+  pets:
+    $ref: ./channels/pets.yaml
+operations:
+  receivePet:
+    action: receive
+    channel:
+      $ref: ./channels/pets.yaml
+    messages:
+      - $ref: '#/channels/pets/messages/petReceived'

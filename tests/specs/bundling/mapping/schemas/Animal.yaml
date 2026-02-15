@@ -1,0 +1,14 @@
+type: object
+discriminator:
+  propertyName: kind
+  mapping:
+    pet: Pet.yaml
+    owner: Owner.yaml
+oneOf:
+  - $ref: ./Pet.yaml
+  - $ref: ./Owner.yaml
+properties:
+  kind:
+    type: string
+required:
+  - kind

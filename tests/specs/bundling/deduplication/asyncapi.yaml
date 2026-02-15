@@ -1,0 +1,30 @@
+asyncapi: 3.0.0
+info:
+  title: Deduplication fixture
+  version: 1.0.0
+channels:
+  petsA:
+    address: pets/a
+    messages:
+      petA:
+        payload:
+          $ref: ./schemas/Pet.yaml
+  petsB:
+    address: pets/b
+    messages:
+      petB:
+        payload:
+          $ref: ./schemas/Pet_2.yaml
+operations:
+  receivePetA:
+    action: receive
+    channel:
+      $ref: '#/channels/petsA'
+    messages:
+      - $ref: '#/channels/petsA/messages/petA'
+  receivePetB:
+    action: receive
+    channel:
+      $ref: '#/channels/petsB'
+    messages:
+      - $ref: '#/channels/petsB/messages/petB'

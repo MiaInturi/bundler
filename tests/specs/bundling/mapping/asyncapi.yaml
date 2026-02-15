@@ -1,0 +1,18 @@
+asyncapi: 3.0.0
+info:
+  title: Mapping fixture
+  version: 1.0.0
+channels:
+  animals:
+    address: animals
+    messages:
+      animalCreated:
+        payload:
+          $ref: ./schemas/Animal.yaml
+operations:
+  receiveAnimal:
+    action: receive
+    channel:
+      $ref: '#/channels/animals'
+    messages:
+      - $ref: '#/channels/animals/messages/animalCreated'

@@ -1,0 +1,9 @@
+type: object
+properties:
+  kind:
+    type: string
+  petName:
+    type: string
+required:
+  - kind
+  - petName
