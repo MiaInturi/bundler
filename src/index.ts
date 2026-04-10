@@ -1,5 +1,5 @@
 import path from 'path';
-import { merge } from 'lodash';
+import merge from 'lodash.merge';
 import {
   resolve,
   versionCheck,
@@ -152,7 +152,3 @@ export default async function bundle(
 
   return new Document(bundledDocument as AsyncAPIObject);
 }
-
-// 'module.exports' is added to maintain backward compatibility with Node.js
-// projects, that use CJS module system.
-module.exports = bundle;

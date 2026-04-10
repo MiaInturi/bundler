@@ -86,14 +86,7 @@ function normalizeRefPath(ref: string): string {
 }
 
 function getSchemaNameFromRef(ref: string): string {
-  const refPath = normalizeRefPath(ref);
-  const fileName = path.basename(refPath);
-  const baseName = fileName.replace(/\.[^.]+$/, '');
-  const sanitized = baseName
-    .replace(/[^A-Za-z0-9_.-]/g, '_')
-    .replace(/^[_\-.]+|[_\-.]+$/g, '');
-  const name = sanitized || 'Schema';
-  return (/^\d/).test(name) ? `Schema_${name}` : name;
+  return ref.split('/').at(-1) ?? 'Schema';
 }
 
 function getOrigin(value: Record<string, any>): string | undefined {
