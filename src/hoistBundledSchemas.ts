@@ -1008,6 +1008,279 @@ function cloneSchemaWithRefs(
   return clone;
 }
 
+function getSchemaNameFromComponentRef(ref: string): string | undefined {
+  if (!ref.startsWith(COMPONENT_SCHEMA_REF_PREFIX)) {
+    return;
+  }
+
+  return ref.slice(COMPONENT_SCHEMA_REF_PREFIX.length);
+}
+
+function collectLocalSchemaDependencies(
+  node: any,
+  knownSchemas: Set<string>,
+  dependencies: Set<string>,
+  seen = new Set<object>()
+): void {
+  if (!isObject(node)) {
+    return;
+  }
+
+  if (seen.has(node)) {
+    return;
+  }
+
+  seen.add(node);
+
+  if (Array.isArray(node)) {
+    node.forEach(entry => {
+      collectLocalSchemaDependencies(entry, knownSchemas, dependencies, seen);
+    });
+    return;
+  }
+
+  const refName =
+    typeof node.$ref === 'string' ? getSchemaNameFromComponentRef(node.$ref) : undefined;
+  if (refName && knownSchemas.has(refName)) {
+    dependencies.add(refName);
+  }
+
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'discriminator' || key === X_DISCRIMINATOR_MAPPING_KEY) {
+      continue;
+    }
+
+    collectLocalSchemaDependencies(value, knownSchemas, dependencies, seen);
+  }
+}
+
+function sortSchemasByDependencies(
+  schemas: Record<string, any>,
+  originalOrder: string[]
+): string[] {
+  const schemaNames = new Set(originalOrder);
+  const dependenciesBySchema = new Map<string, Set<string>>();
+  const allOfParentByChild = new Map<string, string>();
+  const childrenByParent = new Map<string, string[]>();
+  const originalIndex = new Map<string, number>(
+    originalOrder.map((name, index) => [name, index])
+  );
+
+  for (const schemaName of originalOrder) {
+    const schema = schemas[schemaName];
+    const dependencies = new Set<string>();
+    collectLocalSchemaDependencies(schema, schemaNames, dependencies);
+    dependencies.delete(schemaName);
+    dependenciesBySchema.set(schemaName, dependencies);
+
+    if (isSchemaObject(schema) && Array.isArray(schema.allOf)) {
+      const parentCandidates = schema.allOf
+        .map(entry => {
+          if (!isReferenceObject(entry)) {
+            return;
+          }
+          const parentName = getSchemaNameFromComponentRef(entry.$ref);
+          if (!parentName || parentName === schemaName || !schemaNames.has(parentName)) {
+            return;
+          }
+          return parentName;
+        })
+        .filter((candidate): candidate is string => typeof candidate === 'string');
+
+      if (parentCandidates.length === 1) {
+        allOfParentByChild.set(schemaName, parentCandidates[0]);
+      }
+    }
+  }
+
+  for (const childName of originalOrder) {
+    const parentName = allOfParentByChild.get(childName);
+    if (!parentName) {
+      continue;
+    }
+
+    const existingChildren = childrenByParent.get(parentName) || [];
+    existingChildren.push(childName);
+    childrenByParent.set(parentName, existingChildren);
+
+    const childDependencies = dependenciesBySchema.get(childName);
+    if (childDependencies) {
+      childDependencies.add(parentName);
+    }
+  }
+
+  let promotedDependenciesChanged = true;
+  while (promotedDependenciesChanged) {
+    promotedDependenciesChanged = false;
+
+    for (const [childName, parentName] of allOfParentByChild.entries()) {
+      const childDependencies = dependenciesBySchema.get(childName);
+      const parentDependencies = dependenciesBySchema.get(parentName);
+      if (!childDependencies || !parentDependencies) {
+        continue;
+      }
+
+      for (const dependency of childDependencies) {
+        if (
+          dependency === parentName ||
+          dependency === childName ||
+          allOfParentByChild.get(dependency) === parentName
+        ) {
+          continue;
+        }
+
+        if (!parentDependencies.has(dependency)) {
+          parentDependencies.add(dependency);
+          promotedDependenciesChanged = true;
+        }
+      }
+    }
+  }
+
+  const dependentsBySchema = new Map<string, Set<string>>();
+  const indegreeBySchema = new Map<string, number>();
+
+  for (const schemaName of originalOrder) {
+    dependentsBySchema.set(schemaName, new Set<string>());
+  }
+
+  for (const [schemaName, dependencies] of dependenciesBySchema.entries()) {
+    const normalizedDependencies = new Set<string>();
+    for (const dependency of dependencies) {
+      if (dependency !== schemaName && schemaNames.has(dependency)) {
+        normalizedDependencies.add(dependency);
+      }
+    }
+    dependenciesBySchema.set(schemaName, normalizedDependencies);
+    indegreeBySchema.set(schemaName, normalizedDependencies.size);
+
+    for (const dependency of normalizedDependencies) {
+      dependentsBySchema.get(dependency)?.add(schemaName);
+    }
+  }
+
+  const orderedSchemaNames: string[] = [];
+  const emitted = new Set<string>();
+  const available: string[] = originalOrder.filter(
+    schemaName => (indegreeBySchema.get(schemaName) || 0) === 0
+  );
+
+  function sortAvailable(): void {
+    available.sort(
+      (left, right) =>
+        (originalIndex.get(left) || 0) - (originalIndex.get(right) || 0)
+    );
+  }
+
+  function enqueueIfReady(schemaName: string): void {
+    if (
+      emitted.has(schemaName) ||
+      (indegreeBySchema.get(schemaName) || 0) !== 0 ||
+      available.includes(schemaName)
+    ) {
+      return;
+    }
+
+    available.push(schemaName);
+  }
+
+  function emitSchema(schemaName: string, force = false): boolean {
+    if (emitted.has(schemaName)) {
+      return false;
+    }
+
+    if (!force && (indegreeBySchema.get(schemaName) || 0) !== 0) {
+      return false;
+    }
+
+    emitted.add(schemaName);
+    orderedSchemaNames.push(schemaName);
+
+    const dependents = dependentsBySchema.get(schemaName);
+    if (dependents) {
+      for (const dependentName of dependents) {
+        if (emitted.has(dependentName)) {
+          continue;
+        }
+
+        const nextIndegree = Math.max(
+          0,
+          (indegreeBySchema.get(dependentName) || 0) - 1
+        );
+        indegreeBySchema.set(dependentName, nextIndegree);
+        if (nextIndegree === 0) {
+          enqueueIfReady(dependentName);
+        }
+      }
+    }
+
+    return true;
+  }
+
+  function emitAllOfChildren(parentName: string): void {
+    const children = childrenByParent.get(parentName);
+    if (!children || children.length === 0) {
+      return;
+    }
+
+    const pendingChildren = children.filter(childName => !emitted.has(childName));
+    const emittedChildren: string[] = [];
+    let progressed = true;
+
+    while (progressed && pendingChildren.length > 0) {
+      progressed = false;
+
+      for (let index = 0; index < pendingChildren.length; index++) {
+        const childName = pendingChildren[index];
+        if ((indegreeBySchema.get(childName) || 0) !== 0) {
+          continue;
+        }
+
+        pendingChildren.splice(index, 1);
+        index--;
+        const emittedChild = emitSchema(childName);
+        if (emittedChild) {
+          emittedChildren.push(childName);
+          progressed = true;
+        }
+      }
+    }
+
+    for (const childName of emittedChildren) {
+      emitAllOfChildren(childName);
+    }
+  }
+
+  while (orderedSchemaNames.length < originalOrder.length) {
+    sortAvailable();
+
+    let nextReadySchema = available.shift();
+    while (nextReadySchema && emitted.has(nextReadySchema)) {
+      nextReadySchema = available.shift();
+    }
+
+    if (nextReadySchema) {
+      const emittedReadySchema = emitSchema(nextReadySchema);
+      if (emittedReadySchema) {
+        emitAllOfChildren(nextReadySchema);
+      }
+      continue;
+    }
+
+    const fallbackSchema = originalOrder.find(schemaName => !emitted.has(schemaName));
+    if (!fallbackSchema) {
+      break;
+    }
+
+    const emittedFallbackSchema = emitSchema(fallbackSchema, true);
+    if (emittedFallbackSchema) {
+      emitAllOfChildren(fallbackSchema);
+    }
+  }
+
+  return orderedSchemaNames;
+}
+
 export async function hoistBundledSchemas(
   document: AsyncAPIObject
 ): Promise<AsyncAPIObject> {
@@ -1116,7 +1389,17 @@ export async function hoistBundledSchemas(
     nextSchemas[name] = cloneSchemaWithRefs(schema, name, state, true);
   }
 
-  components.schemas = nextSchemas;
+  const sortedSchemaNames = sortSchemasByDependencies(
+    nextSchemas,
+    Object.keys(nextSchemas)
+  );
+  const orderedSchemas: Record<string, any> = {};
+
+  for (const schemaName of sortedSchemaNames) {
+    orderedSchemas[schemaName] = nextSchemas[schemaName];
+  }
+
+  components.schemas = orderedSchemas;
   return document;
 }
 

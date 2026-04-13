@@ -1,0 +1,18 @@
+asyncapi: 3.0.0
+info:
+  title: Topological order fixture
+  version: 1.0.0
+channels:
+  checks:
+    address: checks
+    messages:
+      checked:
+        payload:
+          $ref: ./schemas/Wrapper.yaml
+operations:
+  receiveCheck:
+    action: receive
+    channel:
+      $ref: '#/channels/checks'
+    messages:
+      - $ref: '#/channels/checks/messages/checked'

@@ -11,9 +11,10 @@ describe('[integration testing] bundling normalization should', () => {
   test('hoist external schemas into components with compact names', async () => {
     const document = await bundle('tests/specs/bundling/hoisting/asyncapi.yaml');
     const asyncapi = document.json() as Record<string, any>;
+    const schemaNames = Object.keys(asyncapi.components.schemas);
 
     expect(asyncapi.components?.schemas).toBeDefined();
-    expect(Object.keys(asyncapi.components.schemas)).toEqual(
+    expect(schemaNames).toEqual(
       expect.arrayContaining(['Pet', 'Owner'])
     );
     expect(asyncapi.channels.pets.messages.petCreated.payload.$ref).toBe(
@@ -22,6 +23,23 @@ describe('[integration testing] bundling normalization should', () => {
     expect(asyncapi.components.schemas.Pet.properties.owner.$ref).toBe(
       '#/components/schemas/Owner'
     );
+    expect(schemaNames.indexOf('Owner')).toBeLessThan(schemaNames.indexOf('Pet'));
+  });
+
+  test('order schemas topologically and place allOf child right after parent', async () => {
+    const document = await bundle('tests/specs/bundling/topological-order/asyncapi.yaml');
+    const asyncapi = document.json() as Record<string, any>;
+    const schemaNames = Object.keys(asyncapi.components.schemas);
+
+    const parentIndex = schemaNames.indexOf('Parent');
+    const childIndex = schemaNames.indexOf('Child');
+    const metaIndex = schemaNames.indexOf('Meta');
+    const wrapperIndex = schemaNames.indexOf('Wrapper');
+
+    expect(metaIndex).toBeGreaterThanOrEqual(0);
+    expect(parentIndex).toBeGreaterThan(metaIndex);
+    expect(childIndex).toBe(parentIndex + 1);
+    expect(wrapperIndex).toBeGreaterThan(childIndex);
   });
 
   test('deduplicate equivalent schemas to a canonical compact name', async () => {

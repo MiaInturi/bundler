@@ -1,0 +1,6 @@
+type: object
+properties:
+  item:
+    $ref: ./Child.yaml
+required:
+  - item
