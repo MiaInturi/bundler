@@ -1,0 +1,17 @@
+asyncapi: 3.0.0
+info:
+  title: Fragment schema names fixture
+  version: 1.0.0
+channels:
+  phoneCommunicationInbound:
+    address: phone/communication/inbound
+    messages:
+      startPhoneCommunicationMessage:
+        payload:
+          $ref: ./schemas/schemas.yaml#/components/schemas/PerformPhoneCommunicationRequest
+      cancelPhoneCommunicationMessage:
+        payload:
+          $ref: ./schemas/schemas.yaml#/components/schemas/CancelPhoneCommunicationRequest
+      phoneCallCompletedEvent:
+        payload:
+          $ref: ./schemas/schemas.yaml#/components/schemas/PhoneCommunicationCompletedEvent

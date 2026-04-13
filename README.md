@@ -16,7 +16,7 @@ After bundling, output is normalized for production `AsyncAPI` workflows:
 - External schema `$ref` values are rewritten to local component schema refs.
 - Deep and composed schema structures are normalized consistently (`allOf`, `oneOf`, `anyOf`, nested properties, array items, and related schema keywords).
 - External operation channel refs are rewritten to local refs (`#/channels/...` or `#/components/channels/...` when resolvable).
-- `discriminator.mapping` file values are converted to `#/components/schemas/...` refs.
+- `discriminator.mapping` file values are resolved to local component schemas during normalization.
 - Equivalent schemas are aliased to canonical component names to reduce duplicates.
 - Top-level and nested `x-origin` metadata is used internally for stable naming and rewrites.
 

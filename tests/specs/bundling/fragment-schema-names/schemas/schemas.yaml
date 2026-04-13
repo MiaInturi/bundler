@@ -1,0 +1,23 @@
+components:
+  schemas:
+    PerformPhoneCommunicationRequest:
+      type: object
+      properties:
+        offerId:
+          type: string
+      required:
+        - offerId
+    CancelPhoneCommunicationRequest:
+      type: object
+      properties:
+        offerId:
+          type: string
+      required:
+        - offerId
+    PhoneCommunicationCompletedEvent:
+      type: object
+      properties:
+        offerId:
+          type: string
+      required:
+        - offerId

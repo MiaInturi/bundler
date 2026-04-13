@@ -1,21 +1,6 @@
 import { afterEach, describe, expect, test } from '@jest/globals';
 import bundle from '../../../src';
 
-const COMPONENT_SCHEMA_REF_PREFIX = '#/components/schemas/';
-
-function isFileRef(value: unknown): boolean {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
-  const normalizedValue = value.split('#')[0].toLowerCase();
-  return (
-    normalizedValue.endsWith('.yaml') ||
-    normalizedValue.endsWith('.yml') ||
-    normalizedValue.endsWith('.json')
-  );
-}
-
 describe('[integration testing] bundling normalization should', () => {
   const workingDirectory = process.cwd();
 
@@ -53,6 +38,36 @@ describe('[integration testing] bundling normalization should', () => {
     );
   });
 
+  test('name schemas from component refs in fragments', async () => {
+    const document = await bundle(
+      'tests/specs/bundling/fragment-schema-names/asyncapi.yaml'
+    );
+    const asyncapi = document.json() as Record<string, any>;
+
+    expect(Object.keys(asyncapi.components.schemas)).toEqual(
+      expect.arrayContaining([
+        'PerformPhoneCommunicationRequest',
+        'CancelPhoneCommunicationRequest',
+        'PhoneCommunicationCompletedEvent',
+      ])
+    );
+    expect(Object.keys(asyncapi.components.schemas)).not.toEqual(
+      expect.arrayContaining(['schemas', 'schemas_2', 'schemas_3'])
+    );
+
+    expect(
+      asyncapi.channels.phoneCommunicationInbound.messages.startPhoneCommunicationMessage
+        .payload.$ref
+    ).toBe('#/components/schemas/PerformPhoneCommunicationRequest');
+    expect(
+      asyncapi.channels.phoneCommunicationInbound.messages.cancelPhoneCommunicationMessage
+        .payload.$ref
+    ).toBe('#/components/schemas/CancelPhoneCommunicationRequest');
+    expect(
+      asyncapi.channels.phoneCommunicationInbound.messages.phoneCallCompletedEvent.payload.$ref
+    ).toBe('#/components/schemas/PhoneCommunicationCompletedEvent');
+  });
+
   test('rewrite external operation channel refs to local refs', async () => {
     const document = await bundle('tests/specs/bundling/channel-refs/asyncapi.yaml');
     const asyncapi = document.json() as Record<string, any>;
@@ -60,29 +75,13 @@ describe('[integration testing] bundling normalization should', () => {
     expect(asyncapi.operations.receivePet.channel.$ref).toBe('#/channels/pets');
   });
 
-  test('rewrite discriminator file mappings to local schema refs', async () => {
+  test('rewrite discriminator file mappings and omit extension in output', async () => {
     const document = await bundle('tests/specs/bundling/mapping/asyncapi.yaml');
     const asyncapi = document.json() as Record<string, any>;
     const animalSchema = asyncapi.components.schemas.Animal;
 
     expect(animalSchema.discriminator).toBe('kind');
-    expect(animalSchema['x-discriminator-mapping']).toMatchObject({
-      pet: '#/components/schemas/Pet',
-      owner: '#/components/schemas/Owner',
-    });
-
-    const mappingValues = Object.values(
-      animalSchema['x-discriminator-mapping'] as Record<string, string>
-    );
-    expect(
-      mappingValues.every(
-        value =>
-          typeof value === 'string' && value.startsWith(COMPONENT_SCHEMA_REF_PREFIX)
-      )
-    ).toBeTruthy();
-    expect(
-      mappingValues.some(value => isFileRef(value))
-    ).toBeFalsy();
+    expect(JSON.stringify(asyncapi)).not.toContain('x-discriminator-mapping');
 
     const objectDiscriminatorCount = Object.values(asyncapi.components.schemas).filter(
       (schema: any) =>

@@ -19,6 +19,41 @@ export type { AsyncAPIObject, Options } from './spec-types';
 
 // remember the directory where execution of the program started
 const originDir = String(process.cwd());
+const X_DISCRIMINATOR_MAPPING_KEY = 'x-discriminator-mapping';
+
+function isObject(value: any): value is Record<string, any> {
+  return typeof value === 'object' && value !== null;
+}
+
+function stripXDiscriminatorMapping(document: AsyncAPIObject): AsyncAPIObject {
+  const seen = new Set<object>();
+
+  function walk(node: any): void {
+    if (!isObject(node)) {
+      return;
+    }
+
+    if (seen.has(node)) {
+      return;
+    }
+
+    seen.add(node);
+
+    if (Array.isArray(node)) {
+      node.forEach(item => walk(item));
+      return;
+    }
+
+    delete (node as Record<string, any>)[X_DISCRIMINATOR_MAPPING_KEY];
+
+    for (const value of Object.values(node)) {
+      walk(value);
+    }
+  }
+
+  walk(document);
+  return document;
+}
 
 /**
  *
@@ -134,6 +169,9 @@ export default async function bundle(
     bundledDocument as AsyncAPIObject
   );
   bundledDocument = rewriteExternalChannelRefs(
+    bundledDocument as AsyncAPIObject
+  );
+  bundledDocument = stripXDiscriminatorMapping(
     bundledDocument as AsyncAPIObject
   );
 

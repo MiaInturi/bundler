@@ -85,11 +85,40 @@ function normalizeRefPath(ref: string): string {
   return String(ref).split('#')[0];
 }
 
+function getSchemaNameFromFragment(ref: string): string | undefined {
+  const fragment = String(ref).split('#')[1];
+  if (typeof fragment !== 'string' || fragment.length === 0) {
+    return;
+  }
+
+  const pointerSegments = fragment
+    .replace(/^\/+/, '')
+    .split('/')
+    .filter(Boolean)
+    .map(segment => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+
+  if (pointerSegments.length === 0) {
+    return;
+  }
+
+  if (
+    pointerSegments.length >= 3 &&
+    pointerSegments[0] === 'components' &&
+    pointerSegments[1] === 'schemas'
+  ) {
+    return pointerSegments[2];
+  }
+
+  return pointerSegments[pointerSegments.length - 1];
+}
+
 function getSchemaNameFromRef(ref: string): string {
+  const fragmentName = getSchemaNameFromFragment(ref);
   const refPath = normalizeRefPath(ref);
   const fileName = path.basename(refPath);
   const baseName = fileName.replace(/\.[^.]+$/, '');
-  const sanitized = baseName
+  const suggestedName = fragmentName || baseName;
+  const sanitized = suggestedName
     .replace(/[^A-Za-z0-9_.-]/g, '_')
     .replace(/^[_\-.]+|[_\-.]+$/g, '');
   const name = sanitized || 'Schema';
